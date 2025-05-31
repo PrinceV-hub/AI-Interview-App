@@ -1,44 +1,49 @@
 const express = require('express');
-const passport = require('passport');
-const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const axios = require('axios');
 const cors = require('cors');
+const fs = require('fs').promises;
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use(passport.initialize());
 
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: 'YOUR_GOOGLE_CLIENT_ID',
-      clientSecret: 'YOUR_GOOGLE_CLIENT_SECRET',
-      callbackURL: 'http://localhost:5000/auth/google/callback',
-    },
-    (accessToken, refreshToken, profile, done) => {
-      return done(null, profile);
+// Mock user database (stored in users.json)
+const USERS_FILE = './users.json';
+
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const usersData = await fs.readFile(USERS_FILE, 'utf8');
+    const users = JSON.parse(usersData);
+    const user = users.find(u => u.email === email && u.password === password);
+    if (user) {
+      res.json({ user: { email: user.email, phone: user.phone } });
+    } else {
+      res.status(401).json({ error: 'Invalid credentials' });
     }
-  )
-);
-
-app.get('/auth/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
-
-app.get(
-  '/auth/google/callback',
-  passport.authenticate('google', { session: false }),
-  (req, res) => {
-    res.redirect(`http://localhost:3000?user=${encodeURIComponent(JSON.stringify(req.user))}`);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
   }
-);
+});
 
-app.post('/api/login', (req, res) => {
+app.post('/api/register', async (req, res) => {
   const { email, phone, password } = req.body;
-  // Mock authentication (replace with real database check)
-  if (email === 'test@example.com' && password === 'password') {
+  try {
+    let users = [];
+    try {
+      const usersData = await fs.readFile(USERS_FILE, 'utf8');
+      users = JSON.parse(usersData);
+    } catch (err) {
+      // File doesn't exist yet, start with empty array
+    }
+    if (users.find(u => u.email === email)) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+    users.push({ email, phone, password });
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
     res.json({ user: { email, phone } });
-  } else {
-    res.status(401).json({ error: 'Invalid credentials' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
