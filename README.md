@@ -119,7 +119,7 @@ We use the open-source [LinkedIn Skill Assessments Dataset](https://github.com/E
 
 ## 👥 Contributors
 
-- [Your Name](https://github.com/YourUsername)
+- Prince Verma(https://github.com/PrinceV-hub)
 
 ---
 
