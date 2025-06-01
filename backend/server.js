@@ -3,10 +3,7 @@ const axios = require('axios');
 const cors = require('cors');
 const fs = require('fs').promises;
 const multer = require('multer');
-const nlp = require('compromise');
-const whisper = require('whisper-node');
-const ffmpeg = require('fluent-ffmpeg');
-const { createWriteStream, unlink } = require('fs');
+const natural = require('natural');
 
 const app = express();
 
@@ -99,65 +96,38 @@ app.post('/api/evaluate', upload.single('video'), async (req, res) => {
   console.log('Video file received, size:', req.file.size);
 
   try {
-    // Save video temporarily
-    const videoPath = `./temp_video_${Date.now()}.webm`;
-    const audioPath = `./temp_audio_${Date.now()}.wav`;
-    console.log('Saving video to:', videoPath);
-    await fs.writeFile(videoPath, req.file.buffer);
-
-    // Extract audio using ffmpeg
-    console.log('Extracting audio to:', audioPath);
-    await new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
-        .noVideo()
-        .audioCodec('pcm_s16le')
-        .audioChannels(1)
-        .audioFrequency(16000)
-        .output(audioPath)
-        .on('end', () => {
-          console.log('Audio extraction complete');
-          resolve();
-        })
-        .on('error', (err) => {
-          console.error('FFmpeg error:', err.message);
-          reject(err);
-        })
-        .run();
-    });
-
-    // Transcribe audio with Whisper
-    console.log('Starting Whisper transcription');
-    const transcription = await whisper(audioPath, { model: 'tiny', language: 'en' });
-    console.log('Whisper transcription result:', transcription);
-    const userAnswer = Array.isArray(transcription)
-      ? transcription.map(t => t.text).join(' ').trim()
-      : transcription.text || 'No transcription available';
-    console.log('User answer:', userAnswer);
-
-    // Clean up temporary files
-    await Promise.all([
-      unlink(videoPath).catch(err => console.error('Error deleting video:', err.message)),
-      unlink(audioPath).catch(err => console.error('Error deleting audio:', err.message))
-    ]);
-
+    const userAnswer = req.body.transcription || 'No transcription provided';
     const question = req.body.question || 'What is a closure in JavaScript?';
     const correctAnswer = req.body.correctAnswer || 'A closure is a function that retains access to its lexical scope.';
 
-    // NLP analysis
-    const docUser = nlp(userAnswer);
-    const docCorrect = nlp(correctAnswer);
-    const termsUser = docUser.terms().out('array');
-    const termsCorrect = docCorrect.terms().out('array');
-    const commonTerms = termsUser.filter(term => termsCorrect.includes(term));
-    const similarityScore = (commonTerms.length / Math.max(termsCorrect.length, 1)) * 100;
+    // Compute cosine similarity using TF-IDF
+    const tfidf = new natural.TfIdf();
+    tfidf.addDocument(userAnswer.toLowerCase());
+    tfidf.addDocument(correctAnswer.toLowerCase());
+
+    let similarityScore = 0;
+    tfidf.tfidfs(userAnswer.toLowerCase(), (i, measure) => {
+      if (i === 0) { // User answer
+        const userVector = measure;
+        tfidf.tfidfs(correctAnswer.toLowerCase(), (j, measureCorrect) => {
+          if (j === 1) { // Correct answer
+            const correctVector = measureCorrect;
+            const dotProduct = userVector.reduce((sum, val, idx) => sum + val * (correctVector[idx] || 0), 0);
+            const magnitudeUser = Math.sqrt(userVector.reduce((sum, val) => sum + val * val, 0));
+            const magnitudeCorrect = Math.sqrt(correctVector.reduce((sum, val) => sum + val * val, 0));
+            similarityScore = magnitudeUser && magnitudeCorrect ? (dotProduct / (magnitudeUser * magnitudeCorrect)) * 100 : 0;
+          }
+        });
+      }
+    });
 
     const normalFeedback = similarityScore > 70
       ? `Good job! Your answer is relevant (Score: ${similarityScore.toFixed(1)}%).`
       : `Needs work. Your answer lacks key details (Score: ${similarityScore.toFixed(1)}%).`;
 
     const enhancedFeedback = similarityScore > 70
-      ? `Your response was solid, covering key aspects of ${question}. To improve, consider adding examples, e.g., "A closure can be created using a function inside another function, like a counter."`
-      : `Your response missed important points about ${question}. A better answer would be: "${correctAnswer}". Try explaining with an example, e.g., a function returning another function that accesses outer variables.`;
+      ? `Your response was solid, covering key aspects of "${question}". To improve, consider adding examples, e.g., "A closure can be created using a function inside another function, like a counter."`
+      : `Your response missed important points about "${question}". A better answer would be: "${correctAnswer}". Try explaining with an example, e.g., a function returning another function that accesses outer variables.`;
 
     res.json({
       normalFeedback,
@@ -167,7 +137,7 @@ app.post('/api/evaluate', upload.single('video'), async (req, res) => {
     });
   } catch (err) {
     console.error('Evaluation error:', err.message);
-    res.status(500).json({ normalFeedback: 'Error evaluating response', enhancedFeedback: '', transcription: 'Error transcribing audio' });
+    res.status(500).json({ normalFeedback: 'Error evaluating response', enhancedFeedback: '', transcription: `Error processing: ${err.message}` });
   }
 });
 
