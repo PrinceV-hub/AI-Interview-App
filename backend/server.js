@@ -4,7 +4,7 @@ const cors = require('cors');
 const fs = require('fs').promises;
 const multer = require('multer');
 const nlp = require('compromise');
-const whisper = require('whisper');
+const whisper = require('whisper-node');
 const ffmpeg = require('fluent-ffmpeg');
 const { createWriteStream, unlink } = require('fs');
 
@@ -24,7 +24,7 @@ const USERS_FILE = './users.json';
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const usersData = await fs.readFile(fsUSERS_FILE, 'utf8');
+    const usersData = await fs.readFile(USERS_FILE, 'utf8');
     const users = JSON.parse(usersData);
     const user = users.find(u => u.email === email && u.password === password);
     if (user) {
@@ -43,14 +43,14 @@ app.post('/api/register', async (req, res) => {
   try {
     let users = [];
     try {
-      const usersData = await fs.readFile(fsUSERS_FILE, 'utf8');
+      const usersData = await fs.readFile(USERS_FILE, 'utf8');
       users = JSON.parse(usersData);
     } catch (err) {}
     if (users.find(u => u.email === email)) {
       return res.status(400).json({ error: 'Email already registered' });
     }
     users.push({ email, phone, password });
-    await fs.writeFile(fsUSERS_FILE, JSON.stringify(users, null, 2'));
+    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
     res.json({ user: { email, phone } });
   } catch (err) {
     console.error('Register error:', err.message);
