@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Mock user database (stored in users.json)
+// Mock user database
 const USERS_FILE = './users.json';
 
 app.post('/api/login', async (req, res) => {
@@ -34,7 +34,7 @@ app.post('/api/register', async (req, res) => {
       const usersData = await fs.readFile(USERS_FILE, 'utf8');
       users = JSON.parse(usersData);
     } catch (err) {
-      // File doesn't exist yet, start with empty array
+      // File doesn't exist yet
     }
     if (users.find(u => u.email === email)) {
       return res.status(400).json({ error: 'Email already registered' });
@@ -53,7 +53,7 @@ app.get('/api/questions/:domain', async (req, res) => {
     const response = await axios.get(
       `https://raw.githubusercontent.com/Ebazhanov/linkedin-skill-assessments-quizzes/main/${domain.toLowerCase()}/${domain.toLowerCase()}-quiz.md`
     );
-    const questions = response.data.split('\n').filter((line) => line.startsWith('#### Q'));
+    const questions = response.data.split('\n').filter(line => line.startsWith('#### Q'));
     const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
     res.json({ question: randomQuestion });
   } catch (err) {
@@ -62,7 +62,7 @@ app.get('/api/questions/:domain', async (req, res) => {
 });
 
 app.post('/api/evaluate', (req, res) => {
-  // Mock evaluation (replace with TensorFlow.js model inference)
+  // Mock evaluation
   res.json({ feedback: 'Good response, but improve clarity.' });
 });
 
