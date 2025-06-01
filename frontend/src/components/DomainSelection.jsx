@@ -1,40 +1,36 @@
 import React, { useState } from 'react';
 
 function DomainSelection({ onSelect }) {
-  const domains = [
-    'JavaScript',
-    'Python',
-    'Java',
-    'Data Science',
-    'Machine Learning',
-    'Web Development',
-  ];
-  const [selectedDomain, setSelectedDomain] = useState('');
+  const [domain, setDomain] = useState('');
 
-  const handleSubmit = () => {
-    if (selectedDomain) {
-      onSelect(selectedDomain);
+  const domains = ['JavaScript', 'Python', 'Java', 'SQL', 'React'];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (domain) {
+      onSelect(domain);
     }
   };
 
   return (
     <div className="bg-white p-8 rounded shadow-md w-96">
-      <h2 className="text-2xl font-bold mb-4">Select Interview Domain</h2>
-      <select
-        value={selectedDomain}
-        onChange={(e) => setSelectedDomain(e.target.value)}
-        className="w-full p-2 border rounded mb-4"
-      >
-        <option value="">Select a domain</option>
-        {domains.map((domain) => (
-          <option key={domain} value={domain}>
-            {domain}
-          </option>
-        ))}
-      </select>
+      <h2 className="text-2xl font-bold mb-4">Select Domain</h2>
+      <div className="mb-4">
+        <select
+          value={domain}
+          onChange={(e) => setDomain(e.target.value)}
+          className="w-full p-2 border rounded"
+        >
+          <option value="" disabled>Select a domain</option>
+          {domains.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </div>
       <button
         onClick={handleSubmit}
         className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+        disabled={!domain}
       >
         Start Interview
       </button>
