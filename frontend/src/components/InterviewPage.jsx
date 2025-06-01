@@ -1,92 +1,95 @@
 import React, { useState, useEffect, useRef } from 'react';
-import * as tf from '@tensorflow/tfjs';
 import axios from 'axios';
 
-function InterviewPage({ user, domain }) {
+function InterviewPage({ domain }) {
   const [question, setQuestion] = useState('');
-  const [recording, setRecording] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [feedback, setFeedback] = useState('');
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
 
   useEffect(() => {
-    // Fetch question based on domain
+    // Fetch question
     const fetchQuestion = async () => {
       try {
-        const response = await axios.get(`http://localhost:5000/api/questions/${domain}`);
+        // Replace with your Codespaces backend URL
+        const response = await axios.get(`https://<your-codespace-name>-5000.app.github.dev/api/questions/${domain}`);
         setQuestion(response.data.question);
       } catch (err) {
-        console.error('Error fetching question:', err);
+        setQuestion('Error loading question');
       }
     };
     fetchQuestion();
 
-    // Setup video stream
+    // Start webcam
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
-        videoRef.current.srcObject = stream;
-        mediaRecorderRef.current = new MediaRecorder(stream);
-        mediaRecorderRef.current.ondataavailable = async (event) => {
-          if (event.data.size > 0) {
-            const formData = new FormData();
-            formData.append('video', event.data);
-            try {
-              const response = await axios.post('http://localhost:5000/api/evaluate', formData);
-              setFeedback(response.data.feedback);
-            } catch (err) {
-              console.error('Error evaluating response:', err);
-            }
-          }
-        };
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
       })
-      .catch((err) => console.error('Error accessing media devices:', err));
+      .catch((err) => {
+        console.error('Error accessing webcam:', err);
+      });
 
-    // Load TensorFlow.js model
-    async function loadModel() {
-      const model = await tf.loadLayersModel('http://localhost:5000/model/model.json');
-      console.log('Model loaded');
-    }
-    loadModel();
+    return () => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      }
+    };
   }, [domain]);
 
   const startRecording = () => {
-    setRecording(true);
-    mediaRecorderRef.current.start();
+    setIsRecording(true);
+    navigator.mediaDevices
+      .getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        mediaRecorderRef.current.ondataavailable = (e) => {
+          chunksRef.current.push(e.data);
+        };
+        mediaRecorderRef.current.onstop = async () => {
+          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+          const formData = new FormData();
+          formData.append('video', blob, 'response.webm');
+          try {
+            // Replace with your Codespaces backend URL
+            const response = await axios.post(`https://<your-codespace-name>-5000.app.github.dev/api/evaluate`, formData);
+            setFeedback(response.data.feedback);
+          } catch (err) {
+            setFeedback('Error evaluating response');
+          }
+          chunksRef.current = [];
+        };
+        mediaRecorderRef.current.start();
+      });
   };
 
   const stopRecording = () => {
-    setRecording(false);
-    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+    }
   };
 
   return (
     <div className="bg-white p-8 rounded shadow-md w-full max-w-4xl">
       <h2 className="text-2xl font-bold mb-4">Interview: {domain}</h2>
       <p className="mb-4">{question}</p>
-      <video ref={videoRef} autoPlay className="w-full h-64 mb-4"></video>
-      <div className="flex space-x-4 mb-4">
+      <div className="mb-4">
+        <video ref={videoRef} autoPlay muted className="w-full rounded" />
+      </div>
+      <div className="mb-4">
         <button
-          onClick={startRecording}
-          disabled={recording}
-          className="bg-green-500 text-white p-2 rounded hover:bg-green-600 disabled:bg-gray-400"
+          onClick={isRecording ? stopRecording : startRecording}
+          className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
         >
-          Start Recording
-        </button>
-        <button
-          onClick={stopRecording}
-          disabled={!recording}
-          className="bg-red-500 text-white p-2 rounded hover:bg-red-600 disabled:bg-gray-400"
-        >
-          Stop Recording
+          {isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
       </div>
-      {feedback && (
-        <div className="bg-gray-100 p-4 rounded">
-          <h3 className="text-lg font-bold">Feedback</h3>
-          <p>{feedback}</p>
-        </div>
-      )}
+      {feedback && <p className="text-green-500">{feedback}</p>}
     </div>
   );
 }
