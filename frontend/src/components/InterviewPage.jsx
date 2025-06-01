@@ -60,6 +60,7 @@ function InterviewPage({ domain }) {
         if (blob.size === 0) {
           console.log('Empty blob detected');
           setFeedback('Error: No video data recorded');
+          console.log('Feedback set to: Error: No video data recorded');
           chunksRef.current = [];
           return;
         }
@@ -70,9 +71,11 @@ function InterviewPage({ domain }) {
           const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
           console.log('Response received:', response.data);
           setFeedback(response.data.feedback);
+          console.log('Feedback set to:', response.data.feedback);
         } catch (err) {
           console.error('Error posting video:', err.message);
           setFeedback('Error evaluating response');
+          console.log('Feedback set to: Error evaluating response');
         }
         chunksRef.current = [];
       };
@@ -85,6 +88,7 @@ function InterviewPage({ domain }) {
   };
 
   const stopRecording = () => {
+    console.log('Stop recording called');
     setIsRecording(false);
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
@@ -106,8 +110,21 @@ function InterviewPage({ domain }) {
         >
           {isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
+        <button
+          onClick={() => {
+            setFeedback('Test feedback');
+            console.log('Test feedback set');
+          }}
+          className="bg-gray-500 text-white p-2 rounded ml-2"
+        >
+          Test Feedback
+        </button>
       </div>
-      {feedback && <p className="text-green-500">{feedback}</p>}
+      {feedback && (
+        <p key={feedback} className="text-green-500" style={{ minHeight: '1.5em' }}>
+          {feedback}
+        </p>
+      )}
     </div>
   );
 }
