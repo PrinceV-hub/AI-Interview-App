@@ -5,10 +5,12 @@ function InterviewPage({ domain }) {
   const [question, setQuestion] = useState('');
   const [correctAnswer, setCorrectAnswer] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [feedback, setFeedback] = useState({ normal: '', enhanced: '', score: '' });
+  const [feedback, setFeedback] = useState({ normal: '', enhanced: '', score: '', transcription: '' });
+  const [transcription, setTranscription] = useState('');
   const [feedbackKey, setFeedbackKey] = useState(0);
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const speechRecognitionRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
 
@@ -46,6 +48,7 @@ function InterviewPage({ domain }) {
 
   const startRecording = () => {
     setIsRecording(true);
+    setTranscription('');
     if (streamRef.current) {
       mediaRecorderRef.current = new MediaRecorder(streamRef.current);
       mediaRecorderRef.current.ondataavailable = (e) => {
@@ -59,7 +62,7 @@ function InterviewPage({ domain }) {
         console.log('Blob created, size:', blob.size);
         if (blob.size === 0) {
           console.log('Empty blob detected');
-          setFeedback({ normal: 'Error: No video data recorded', enhanced: '', score: '' });
+          setFeedback({ normal: 'Error: No video data recorded', enhanced: '', score: '', transcription: '' });
           setFeedbackKey(prev => prev + 1);
           chunksRef.current = [];
           return;
@@ -68,29 +71,55 @@ function InterviewPage({ domain }) {
         formData.append('video', blob, 'response.webm');
         formData.append('question', question);
         formData.append('correctAnswer', correctAnswer);
+        formData.append('transcription', transcription || 'No transcription available'); // Send browser transcription
         try {
           console.log('Sending POST to /api/evaluate');
           const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
           console.log('Response received:', response.data);
           setFeedback({
-            normal: response.data.normalFeedback || response.data.feedback || 'No normal feedback',
+            normal: response.data.normalFeedback || 'No normal feedback',
             enhanced: response.data.enhancedFeedback || '',
-            score: response.data.similarityScore || ''
+            score: response.data.similarityScore || '',
+            transcription: response.data.transcription || transcription
           });
           setFeedbackKey(prev => prev + 1);
           console.log('Feedback set to:', response.data);
         } catch (err) {
           console.error('Error posting video:', err.message);
-          setFeedback({ normal: 'Error evaluating response', enhanced: '', score: '' });
+          setFeedback({ normal: 'Error evaluating response', enhanced: '', score: '', transcription: transcription || 'Error transcribing audio' });
           setFeedbackKey(prev => prev + 1);
           console.log('Feedback set to: Error evaluating response');
         }
         chunksRef.current = [];
       };
       mediaRecorderRef.current.start();
+
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        speechRecognitionRef.current = new SpeechRecognition();
+        speechRecognitionRef.current.continuous = true;
+        speechRecognitionRef.current.interimResults = true;
+        speechRecognitionRef.current.lang = 'en-US';
+        speechRecognitionRef.current.onresult = (event) => {
+          let interim = '';
+          let final = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              final += event.results[i][0].transcript + ' ';
+            } else {
+              interim += event.results[i][0].transcript + ' ';
+            }
+          }
+          setTranscription(final + interim);
+        };
+        speechRecognitionRef.current.start();
+      } else {
+        console.log('SpeechRecognition not supported');
+        setTranscription('Speech recognition not available in this browser');
+      }
     } else {
       console.error('No stream available for recording');
-      setFeedback({ normal: 'Error: Webcam not initialized', enhanced: '', score: '' });
+      setFeedback({ normal: 'Error: Webcam not initialized', enhanced: '', score: '', transcription: '' });
       setFeedbackKey(prev => prev + 1);
       setIsRecording(false);
     }
@@ -101,6 +130,9 @@ function InterviewPage({ domain }) {
     setIsRecording(false);
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
+    }
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
     }
   };
 
@@ -121,7 +153,7 @@ function InterviewPage({ domain }) {
         </button>
         <button
           onClick={() => {
-            setFeedback({ normal: 'Test normal feedback', enhanced: 'Test enhanced feedback', score: '80' });
+            setFeedback({ normal: 'Test normal feedback', enhanced: 'Test enhanced feedback', score: '80', transcription: 'Test transcription' });
             setFeedbackKey(prev => prev + 1);
             console.log('Test feedback set');
           }}
@@ -131,6 +163,9 @@ function InterviewPage({ domain }) {
         </button>
       </div>
       <div className="mt-4">
+        <p className="text-yellow-500" style={{ minHeight: '1.5em' }}>
+          Live Transcription: {transcription || 'Speak to see transcription...'}
+        </p>
         <p className="text-green-500" style={{ minHeight: '1.5em' }}>
           Normal Feedback: {feedback.normal || 'No feedback yet'}
         </p>
@@ -139,6 +174,9 @@ function InterviewPage({ domain }) {
         </p>
         <p className="text-purple-500" style={{ minHeight: '1.5em' }}>
           Similarity Score: {feedback.score ? `${feedback.score}%` : 'No score yet'}
+        </p>
+        <p className="text-orange-500" style={{ minHeight: '1.5em' }}>
+          Transcription: {feedback.transcription || 'No transcription yet'}
         </p>
       </div>
     </div>
