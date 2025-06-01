@@ -3,9 +3,10 @@ import axios from 'axios';
 
 function InterviewPage({ domain }) {
   const [question, setQuestion] = useState('');
+  const [correctAnswer, setCorrectAnswer] = useState('');
   const [isRecording, setIsRecording] = useState(false);
-  const [feedback, setFeedback] = useState('');
-  const [feedbackKey, setFeedbackKey] = useState(0); // Added for forced re-render
+  const [feedback, setFeedback] = useState({ normal: '', enhanced: '', score: '' });
+  const [feedbackKey, setFeedbackKey] = useState(0);
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -16,6 +17,7 @@ function InterviewPage({ domain }) {
       try {
         const response = await axios.get(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/questions/${domain}`);
         setQuestion(response.data.question);
+        setCorrectAnswer(response.data.correctAnswer || '');
       } catch (err) {
         console.error('Error fetching question:', err.message);
         setQuestion('Error loading question');
@@ -57,23 +59,29 @@ function InterviewPage({ domain }) {
         console.log('Blob created, size:', blob.size);
         if (blob.size === 0) {
           console.log('Empty blob detected');
-          setFeedback('Error: No video data recorded');
+          setFeedback({ normal: 'Error: No video data recorded', enhanced: '', score: '' });
           setFeedbackKey(prev => prev + 1);
           chunksRef.current = [];
           return;
         }
         const formData = new FormData();
         formData.append('video', blob, 'response.webm');
+        formData.append('question', question);
+        formData.append('correctAnswer', correctAnswer);
         try {
           console.log('Sending POST to /api/evaluate');
           const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
           console.log('Response received:', response.data);
-          setFeedback(response.data.feedback);
-          setFeedbackKey(prev => prev + 1); // Force re-render
-          console.log('Feedback set to:', response.data.feedback);
+          setFeedback({
+            normal: response.data.normalFeedback || response.data.feedback || 'No normal feedback',
+            enhanced: response.data.enhancedFeedback || '',
+            score: response.data.similarityScore || ''
+          });
+          setFeedbackKey(prev => prev + 1);
+          console.log('Feedback set to:', response.data);
         } catch (err) {
           console.error('Error posting video:', err.message);
-          setFeedback('Error evaluating response');
+          setFeedback({ normal: 'Error evaluating response', enhanced: '', score: '' });
           setFeedbackKey(prev => prev + 1);
           console.log('Feedback set to: Error evaluating response');
         }
@@ -82,7 +90,7 @@ function InterviewPage({ domain }) {
       mediaRecorderRef.current.start();
     } else {
       console.error('No stream available for recording');
-      setFeedback('Error: Webcam not initialized');
+      setFeedback({ normal: 'Error: Webcam not initialized', enhanced: '', score: '' });
       setFeedbackKey(prev => prev + 1);
       setIsRecording(false);
     }
@@ -113,7 +121,7 @@ function InterviewPage({ domain }) {
         </button>
         <button
           onClick={() => {
-            setFeedback('Test feedback');
+            setFeedback({ normal: 'Test normal feedback', enhanced: 'Test enhanced feedback', score: '80' });
             setFeedbackKey(prev => prev + 1);
             console.log('Test feedback set');
           }}
@@ -122,11 +130,17 @@ function InterviewPage({ domain }) {
           Test Feedback
         </button>
       </div>
-      {feedback && (
-        <p key={feedbackKey} className="text-green-500" style={{ minHeight: '1.5em', marginTop: '1em' }}>
-          {feedback}
+      <div className="mt-4">
+        <p className="text-green-500" style={{ minHeight: '1.5em' }}>
+          Normal Feedback: {feedback.normal || 'No feedback yet'}
         </p>
-      )}
+        <p className="text-blue-500" style={{ minHeight: '1.5em' }}>
+          Enhanced Feedback: {feedback.enhanced || 'No enhanced feedback yet'}
+        </p>
+        <p className="text-purple-500" style={{ minHeight: '1.5em' }}>
+          Similarity Score: {feedback.score ? `${feedback.score}%` : 'No score yet'}
+        </p>
+      </div>
     </div>
   );
 }
