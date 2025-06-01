@@ -3,35 +3,22 @@ const axios = require('axios');
 const cors = require('cors');
 const fs = require('fs').promises;
 const multer = require('multer');
-const tf = require('@tensorflow/tfjs-node');
+const nlp = require('compromise');
+const whisper = require('whisper-node');
+const ffmpeg = require('fluent-ffmpeg');
+const { createWriteStream, unlink } = require('fs');
 
 const app = express();
 
-// Configure CORS
 app.use(cors({
   origin: 'https://silver-space-enigma-pjprqq57wwp5h6qgg-3000.app.github.dev',
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type']
 }));
 
-// Handle file uploads
 const upload = multer({ storage: multer.memoryStorage() });
-
-// Parse JSON bodies
 app.use(express.json());
 
-// Load trained model
-let model;
-(async () => {
-  try {
-    model = await tf.loadLayersModel('file://./model/model.json');
-    console.log('Model loaded successfully');
-  } catch (err) {
-    console.error('Error loading model:', err.message);
-  }
-})();
-
-// Mock user database
 const USERS_FILE = './users.json';
 
 app.post('/api/login', async (req, res) => {
@@ -58,9 +45,7 @@ app.post('/api/register', async (req, res) => {
     try {
       const usersData = await fs.readFile(USERS_FILE, 'utf8');
       users = JSON.parse(usersData);
-    } catch (err) {
-      // File doesn't exist yet
-    }
+    } catch (err) {}
     if (users.find(u => u.email === email)) {
       return res.status(400).json({ error: 'Email already registered' });
     }
@@ -79,44 +64,101 @@ app.get('/api/questions/:domain', async (req, res) => {
     const response = await axios.get(
       `https://raw.githubusercontent.com/Ebazhanov/linkedin-skill-assessments-quizzes/main/${domain.toLowerCase()}/${domain.toLowerCase()}-quiz.md`
     );
-    const questions = response.data.split('\n').filter(line => line.startsWith('#### Q'));
+    const data = response.data;
+    const lines = data.split('\n');
+    const questions = [];
+    let currentQuestion = null;
+
+    for (const line of lines) {
+      if (line.startsWith('#### Q')) {
+        if (currentQuestion) {
+          questions.push(currentQuestion);
+        }
+        currentQuestion = { text: line.replace('#### Q', '').trim(), answer: '' };
+      } else if (line.startsWith('**Correct Answer:**') && currentQuestion) {
+        currentQuestion.answer = line.replace('**Correct Answer:**', '').trim();
+      }
+    }
+    if (currentQuestion) {
+      questions.push(currentQuestion);
+    }
     const randomQuestion = questions[Math.floor(Math.random() * questions.length)];
-    res.json({ question: randomQuestion });
+    res.json({ question: randomQuestion.text, correctAnswer: randomQuestion.answer });
   } catch (err) {
     console.error('Question fetch error:', err.message);
     res.status(500).json({ error: 'Error fetching question' });
   }
 });
 
-app.post('/api/evaluate', upload.single('video'), (req, res) => {
+app.post('/api/evaluate', upload.single('video'), async (req, res) => {
   console.log('Received /api/evaluate request');
   if (!req.file) {
     console.log('No video file received');
-    return res.status(400).json({ feedback: 'No video data received' });
+    return res.status(400).json({ normalFeedback: 'No video data received', enhancedFeedback: '' });
   }
   console.log('Video file received, size:', req.file.size);
 
-  // Mock evaluation (replace with model-based evaluation if desired)
-  res.json({ feedback: 'Good response, but improve clarity.' });
+  try {
+    // Save video temporarily
+    const videoPath = `./temp_video_${Date.now()}.webm`;
+    const audioPath = `./temp_audio_${Date.now()}.wav`;
+    await fs.writeFile(videoPath, req.file.buffer);
 
-  // Optional: Model-based evaluation
-  /*
-  if (model) {
-    try {
-      // Mock features (replace with real video processing)
-      const features = tf.tensor2d([Array(25).fill(Math.random())], [1, 25]);
-      const prediction = model.predict(features);
-      const score = prediction.dataSync()[0];
-      const feedback = score > 0.5 ? 'Great response!' : 'Needs improvement.';
-      res.json({ feedback });
-    } catch (err) {
-      console.error('Model evaluation error:', err.message);
-      res.json({ feedback: 'Error evaluating with model, using mock response.' });
-    }
-  } else {
-    res.json({ feedback: 'Model not loaded, using mock response.' });
+    // Extract audio using ffmpeg
+    await new Promise((resolve, reject) => {
+      ffmpeg(videoPath)
+        .noVideo()
+        .audioCodec('pcm_s16le')
+        .audioChannels(1)
+        .audioFrequency(16000)
+        .output(audioPath)
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+
+    // Transcribe audio with Whisper
+    const transcription = await whisper.transcribe(audioPath, {
+      modelName: 'tiny', // Use 'tiny' for lower resource usage
+      whisperOptions: { language: 'en' }
+    });
+    const userAnswer = transcription.transcriptions
+      .map(t => t.text)
+      .join(' ')
+      .trim() || 'No transcription available';
+
+    // Clean up temporary files
+    await Promise.all([unlink(videoPath), unlink(audioPath)]);
+
+    const question = req.body.question || 'What is a closure in JavaScript?';
+    const correctAnswer = req.body.correctAnswer || 'A closure is a function that retains access to its lexical scope.';
+
+    // NLP analysis
+    const docUser = nlp(userAnswer);
+    const docCorrect = nlp(correctAnswer);
+    const termsUser = docUser.terms().out('array');
+    const termsCorrect = docCorrect.terms().out('array');
+    const commonTerms = termsUser.filter(term => termsCorrect.includes(term));
+    const similarityScore = (commonTerms.length / Math.max(termsCorrect.length, 1)) * 100;
+
+    const normalFeedback = similarityScore > 70
+      ? `Good job! Your answer is relevant (Score: ${similarityScore.toFixed(1)}%).`
+      : `Needs work. Your answer lacks key details (Score: ${similarityScore.toFixed(1)}%).`;
+
+    const enhancedFeedback = similarityScore > 70
+      ? `Your response was solid, covering key aspects of ${question}. To improve, consider adding examples, e.g., "A closure can be created using a function inside another function, like a counter."`
+      : `Your response missed important points about ${question}. A better answer would be: "${correctAnswer}". Try explaining with an example, e.g., a function returning another function that accesses outer variables.`;
+
+    res.json({
+      normalFeedback,
+      enhancedFeedback,
+      similarityScore: similarityScore.toFixed(1),
+      transcription: userAnswer
+    });
+  } catch (err) {
+    console.error('Evaluation error:', err.message);
+    res.status(500).json({ normalFeedback: 'Error evaluating response', enhancedFeedback: '', transcription: 'Error transcribing audio' });
   }
-  */
 });
 
 app.listen(5000, () => console.log('Server running on port 5000'));
