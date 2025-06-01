@@ -12,7 +12,8 @@ function LoginPage({ onLogin }) {
     e.preventDefault();
     try {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
-      const response = await axios.post(`http://localhost:5000${endpoint}`, { email, phone, password });
+      // Replace with your Codespaces backend URL
+      const response = await axios.post(`https://<your-codespace-name>-5000.app.github.dev${endpoint}`, { email, phone, password });
       onLogin(response.data.user);
     } catch (err) {
       setError(err.response?.data?.error || 'Server error');
@@ -32,15 +33,17 @@ function LoginPage({ onLogin }) {
           className="w-full p-2 border rounded"
         />
       </div>
-      <div className="mb-4">
-        <input
-          type="text"
-          placeholder="Phone"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="w-full p-2 border rounded"
-        />
-      </div>
+      {isRegistering && (
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full p-2 border rounded"
+          />
+        </div>
+      )}
       <div className="mb-4">
         <input
           type="password"
