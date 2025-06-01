@@ -6,8 +6,8 @@ async function trainModel(domain) {
   const xs = [];
   const ys = [];
 
-  // Mock data preparation (replace with real text processing)
-  data.forEach((item) => {
+  // Mock data preparation
+  data.forEach(item => {
     xs.push(item.question);
     ys.push(Math.random() > 0.5 ? 1 : 0); // Mock labels
   });
@@ -15,8 +15,8 @@ async function trainModel(domain) {
   const model = tf.sequential();
   model.add(
     tf.layers.dense({
-      units: 64,
-      inputShape: [100], // Mock input shape
+      units: 32,
+      inputShape: [50],
       activation: 'relu',
     })
   );
@@ -28,8 +28,8 @@ async function trainModel(domain) {
     metrics: ['accuracy'],
   });
 
-  // Mock training (replace with real tensor data)
-  const xsTensor = tf.tensor2d(xs.map(() => Array(100).fill(Math.random())));
+  // Mock training
+  const xsTensor = tf.tensor2d(xs.map(() => Array(50).fill(Math.random())));
   const ysTensor = tf.tensor1d(ys);
 
   await model.fit(xsTensor, ysTensor, {
