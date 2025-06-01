@@ -1,0 +1,5 @@
+node_modules/
+backend/data/
+backend/model/
+frontend/build/
+*.log
