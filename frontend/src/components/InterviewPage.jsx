@@ -5,13 +5,13 @@ function InterviewPage({ domain }) {
   const [question, setQuestion] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [feedbackKey, setFeedbackKey] = useState(0); // Added for forced re-render
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
 
   useEffect(() => {
-    // Fetch question
     const fetchQuestion = async () => {
       try {
         const response = await axios.get(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/questions/${domain}`);
@@ -23,7 +23,6 @@ function InterviewPage({ domain }) {
     };
     fetchQuestion();
 
-    // Start webcam
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
@@ -36,7 +35,6 @@ function InterviewPage({ domain }) {
         console.error('Error accessing webcam:', err.message);
       });
 
-    // Cleanup
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -60,7 +58,7 @@ function InterviewPage({ domain }) {
         if (blob.size === 0) {
           console.log('Empty blob detected');
           setFeedback('Error: No video data recorded');
-          console.log('Feedback set to: Error: No video data recorded');
+          setFeedbackKey(prev => prev + 1);
           chunksRef.current = [];
           return;
         }
@@ -71,10 +69,12 @@ function InterviewPage({ domain }) {
           const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
           console.log('Response received:', response.data);
           setFeedback(response.data.feedback);
+          setFeedbackKey(prev => prev + 1); // Force re-render
           console.log('Feedback set to:', response.data.feedback);
         } catch (err) {
           console.error('Error posting video:', err.message);
           setFeedback('Error evaluating response');
+          setFeedbackKey(prev => prev + 1);
           console.log('Feedback set to: Error evaluating response');
         }
         chunksRef.current = [];
@@ -83,6 +83,7 @@ function InterviewPage({ domain }) {
     } else {
       console.error('No stream available for recording');
       setFeedback('Error: Webcam not initialized');
+      setFeedbackKey(prev => prev + 1);
       setIsRecording(false);
     }
   };
@@ -113,6 +114,7 @@ function InterviewPage({ domain }) {
         <button
           onClick={() => {
             setFeedback('Test feedback');
+            setFeedbackKey(prev => prev + 1);
             console.log('Test feedback set');
           }}
           className="bg-gray-500 text-white p-2 rounded ml-2"
@@ -121,7 +123,7 @@ function InterviewPage({ domain }) {
         </button>
       </div>
       {feedback && (
-        <p key={feedback} className="text-green-500" style={{ minHeight: '1.5em' }}>
+        <p key={feedbackKey} className="text-green-500" style={{ minHeight: '1.5em', marginTop: '1em' }}>
           {feedback}
         </p>
       )}
