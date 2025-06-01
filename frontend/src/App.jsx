@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import LoginPage from './components/LoginPage';
 import DomainSelection from './components/DomainSelection';
 import InterviewPage from './components/InterviewPage';
@@ -17,17 +16,16 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
       {!user ? (
         <LoginPage onLogin={handleLogin} />
       ) : !domain ? (
         <DomainSelection onSelect={handleDomainSelect} />
       ) : (
-        <InterviewPage user={user} domain={domain} />
+        <InterviewPage domain={domain} />
       )}
     </div>
   );
 }
 
-const root = createRoot(document.getElementById('root'));
-root.render(<App />);
+export default App;
