@@ -4,7 +4,7 @@ const cors = require('cors');
 const fs = require('fs').promises;
 const multer = require('multer');
 const nlp = require('compromise');
-const whisper = require('whisper-node');
+const whisper = require('whisper');
 const ffmpeg = require('fluent-ffmpeg');
 const { createWriteStream, unlink } = require('fs');
 
@@ -24,7 +24,7 @@ const USERS_FILE = './users.json';
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const usersData = await fs.readFile(USERS_FILE, 'utf8');
+    const usersData = await fs.readFile(fsUSERS_FILE, 'utf8');
     const users = JSON.parse(usersData);
     const user = users.find(u => u.email === email && u.password === password);
     if (user) {
@@ -43,14 +43,14 @@ app.post('/api/register', async (req, res) => {
   try {
     let users = [];
     try {
-      const usersData = await fs.readFile(USERS_FILE, 'utf8');
+      const usersData = await fs.readFile(fsUSERS_FILE, 'utf8');
       users = JSON.parse(usersData);
     } catch (err) {}
     if (users.find(u => u.email === email)) {
       return res.status(400).json({ error: 'Email already registered' });
     }
     users.push({ email, phone, password });
-    await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
+    await fs.writeFile(fsUSERS_FILE, JSON.stringify(users, null, 2'));
     res.json({ user: { email, phone } });
   } catch (err) {
     console.error('Register error:', err.message);
@@ -102,9 +102,11 @@ app.post('/api/evaluate', upload.single('video'), async (req, res) => {
     // Save video temporarily
     const videoPath = `./temp_video_${Date.now()}.webm`;
     const audioPath = `./temp_audio_${Date.now()}.wav`;
+    console.log('Saving video to:', videoPath);
     await fs.writeFile(videoPath, req.file.buffer);
 
     // Extract audio using ffmpeg
+    console.log('Extracting audio to:', audioPath);
     await new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .noVideo()
@@ -112,23 +114,31 @@ app.post('/api/evaluate', upload.single('video'), async (req, res) => {
         .audioChannels(1)
         .audioFrequency(16000)
         .output(audioPath)
-        .on('end', resolve)
-        .on('error', reject)
+        .on('end', () => {
+          console.log('Audio extraction complete');
+          resolve();
+        })
+        .on('error', (err) => {
+          console.error('FFmpeg error:', err.message);
+          reject(err);
+        })
         .run();
     });
 
     // Transcribe audio with Whisper
-    const transcription = await whisper.transcribe(audioPath, {
-      modelName: 'tiny', // Use 'tiny' for lower resource usage
-      whisperOptions: { language: 'en' }
-    });
-    const userAnswer = transcription.transcriptions
-      .map(t => t.text)
-      .join(' ')
-      .trim() || 'No transcription available';
+    console.log('Starting Whisper transcription');
+    const transcription = await whisper(audioPath, { model: 'tiny', language: 'en' });
+    console.log('Whisper transcription result:', transcription);
+    const userAnswer = Array.isArray(transcription)
+      ? transcription.map(t => t.text).join(' ').trim()
+      : transcription.text || 'No transcription available';
+    console.log('User answer:', userAnswer);
 
     // Clean up temporary files
-    await Promise.all([unlink(videoPath), unlink(audioPath)]);
+    await Promise.all([
+      unlink(videoPath).catch(err => console.error('Error deleting video:', err.message)),
+      unlink(audioPath).catch(err => console.error('Error deleting audio:', err.message))
+    ]);
 
     const question = req.body.question || 'What is a closure in JavaScript?';
     const correctAnswer = req.body.correctAnswer || 'A closure is a function that retains access to its lexical scope.';
