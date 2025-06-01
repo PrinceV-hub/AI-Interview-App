@@ -8,16 +8,16 @@ function InterviewPage({ domain }) {
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
+  const streamRef = useRef(null);
 
   useEffect(() => {
     // Fetch question
     const fetchQuestion = async () => {
       try {
-        // Replace with your Codespaces backend URL
-        //const response = await axios.get(`https://<your-codespace-name>-5000.app.github.dev/api/questions/${domain}`);
         const response = await axios.get(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/questions/${domain}`);
         setQuestion(response.data.question);
       } catch (err) {
+        console.error('Error fetching question:', err.message);
         setQuestion('Error loading question');
       }
     };
@@ -27,46 +27,61 @@ function InterviewPage({ domain }) {
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: true })
       .then((stream) => {
+        streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
       })
       .catch((err) => {
-        console.error('Error accessing webcam:', err);
+        console.error('Error accessing webcam:', err.message);
       });
 
+    // Cleanup
     return () => {
-      if (videoRef.current && videoRef.current.srcObject) {
-        videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
   }, [domain]);
 
   const startRecording = () => {
     setIsRecording(true);
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
-      .then((stream) => {
-        mediaRecorderRef.current = new MediaRecorder(stream);
-        mediaRecorderRef.current.ondataavailable = (e) => {
+    if (streamRef.current) {
+      mediaRecorderRef.current = new MediaRecorder(streamRef.current);
+      mediaRecorderRef.current.ondataavailable = (e) => {
+        if (e.data.size > 0) {
           chunksRef.current.push(e.data);
-        };
-        mediaRecorderRef.current.onstop = async () => {
-          const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-          const formData = new FormData();
-          formData.append('video', blob, 'response.webm');
-          try {
-            // Replace with your Codespaces backend URL
-            //const response = await axios.post(`https://<your-codespace-name>-5000.app.github.dev/api/evaluate`, formData);
-            const evalResponse = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
-            setFeedback(response.data.feedback);
-          } catch (err) {
-            setFeedback('Error evaluating response');
-          }
+        }
+      };
+      mediaRecorderRef.current.onstop = async () => {
+        console.log('Recording stopped, creating blob');
+        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+        console.log('Blob created, size:', blob.size);
+        if (blob.size === 0) {
+          console.log('Empty blob detected');
+          setFeedback('Error: No video data recorded');
           chunksRef.current = [];
-        };
-        mediaRecorderRef.current.start();
-      });
+          return;
+        }
+        const formData = new FormData();
+        formData.append('video', blob, 'response.webm');
+        try {
+          console.log('Sending POST to /api/evaluate');
+          const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
+          console.log('Response received:', response.data);
+          setFeedback(response.data.feedback);
+        } catch (err) {
+          console.error('Error posting video:', err.message);
+          setFeedback('Error evaluating response');
+        }
+        chunksRef.current = [];
+      };
+      mediaRecorderRef.current.start();
+    } else {
+      console.error('No stream available for recording');
+      setFeedback('Error: Webcam not initialized');
+      setIsRecording(false);
+    }
   };
 
   const stopRecording = () => {
@@ -87,6 +102,7 @@ function InterviewPage({ domain }) {
         <button
           onClick={isRecording ? stopRecording : startRecording}
           className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+          disabled={!streamRef.current && !isRecording}
         >
           {isRecording ? 'Stop Recording' : 'Start Recording'}
         </button>
