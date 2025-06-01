@@ -14,7 +14,8 @@ function InterviewPage({ domain }) {
     const fetchQuestion = async () => {
       try {
         // Replace with your Codespaces backend URL
-        const response = await axios.get(`https://<your-codespace-name>-5000.app.github.dev/api/questions/${domain}`);
+        //const response = await axios.get(`https://<your-codespace-name>-5000.app.github.dev/api/questions/${domain}`);
+        const response = await axios.get(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/questions/${domain}`);
         setQuestion(response.data.question);
       } catch (err) {
         setQuestion('Error loading question');
@@ -56,7 +57,8 @@ function InterviewPage({ domain }) {
           formData.append('video', blob, 'response.webm');
           try {
             // Replace with your Codespaces backend URL
-            const response = await axios.post(`https://<your-codespace-name>-5000.app.github.dev/api/evaluate`, formData);
+            //const response = await axios.post(`https://<your-codespace-name>-5000.app.github.dev/api/evaluate`, formData);
+            const evalResponse = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/api/evaluate`, formData);
             setFeedback(response.data.feedback);
           } catch (err) {
             setFeedback('Error evaluating response');

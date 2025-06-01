@@ -13,7 +13,8 @@ function LoginPage({ onLogin }) {
     try {
       const endpoint = isRegistering ? '/api/register' : '/api/login';
       // Replace with your Codespaces backend URL
-      const response = await axios.post(`https://<your-codespace-name>-5000.app.github.dev${endpoint}`, { email, phone, password });
+      const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev${endpoint}`, { email, phone, password });
+      //const response = await axios.post(`https://silver-space-enigma-pjprqq57wwp5h6qgg-5000.app.github.dev/`, { email, phone, password });
       onLogin(response.data.user);
     } catch (err) {
       setError(err.response?.data?.error || 'Server error');
